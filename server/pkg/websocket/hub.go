@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/pierrec/lz4/v4"
 	"github.com/vmihailenco/msgpack/v5"
 )
 
@@ -57,11 +58,13 @@ type Stroke struct {
 
 // StrokeDelta 差分笔触（只含增量点）
 type StrokeDelta struct {
-	StrokeID string      `json:"stroke_id"`
-	NewPoints []PointInfo `json:"new_points"` // 新增的点
-	Timestamp int64       `json:"timestamp"`
-	TotalPoints int       `json:"total_points"` // 当前总点数
-	VectorClock VectorClock `json:"vc,omitempty"`
+	StrokeID     string      `json:"stroke_id"`
+	NewPoints    []PointInfo `json:"new_points"`               // 未压缩时使用
+	Compressed   []byte      `json:"compressed,omitempty"`     // LZ4 压缩的点数据
+	Timestamp    int64       `json:"timestamp"`
+	TotalPoints  int         `json:"total_points"`             // 当前总点数
+	VectorClock  VectorClock `json:"vc,omitempty"`
+	UseCompress  bool        `json:"use_compress,omitempty"`   // 是否使用压缩
 }
 
 // BrushInfo 画笔信息
@@ -472,7 +475,7 @@ func (c *Client) handleStroke(msg *Message) {
 	
 	// 4. 广播给房间内其他人
 	msg.RoomID = roomID
-	broadcastData, _ := json.Marshal(msg)
+	broadcastData, _ := serializeMessage(msg, c.useMsgPack)
 	h.broadcastToRoomBytes(roomID, broadcastData, c)
 	
 	// 5. 发送确认给发送者
@@ -505,9 +508,19 @@ func (c *Client) handleStrokeDelta(msg *Message) {
 	room.lastActivity = time.Now()
 	room.mu.Unlock()
 	
+	// 自动压缩：点数 > 10 时使用 LZ4 压缩
+	if len(msg.StrokeDelta.NewPoints) > 10 {
+		compressed, err := compressPoints(msg.StrokeDelta.NewPoints)
+		if err == nil {
+			msg.StrokeDelta.Compressed = compressed
+			msg.StrokeDelta.NewPoints = nil // 清空原始数据
+			msg.StrokeDelta.UseCompress = true
+		}
+	}
+	
 	msg.RoomID = roomID
 	msg.Type = MsgTypeStrokeDelta
-	broadcastData, _ := json.Marshal(msg)
+	broadcastData, _ := serializeMessage(msg, c.useMsgPack)
 	h.broadcastToRoomBytes(roomID, broadcastData, c)
 }
 
@@ -722,4 +735,44 @@ func deserializeMessage(data []byte, msg *Message) error {
 		return msgpack.Unmarshal(data, msg)
 	}
 	return json.Unmarshal(data, msg)
+}
+
+// ============ LZ4 压缩 ============
+
+// compressPoints 压缩点数据
+func compressPoints(points []PointInfo) ([]byte, error) {
+	// 序列化为 MessagePack（比 JSON 更紧凑）
+	data, err := msgpack.Marshal(points)
+	if err != nil {
+		return nil, err
+	}
+	
+	// LZ4 压缩
+	var buf bytes.Buffer
+	writer := lz4.NewWriter(&buf)
+	if _, err := writer.Write(data); err != nil {
+		writer.Close()
+		return nil, err
+	}
+	writer.Close()
+	
+	return buf.Bytes(), nil
+}
+
+// decompressPoints 解压点数据
+func decompressPoints(data []byte) ([]PointInfo, error) {
+	// LZ4 解压
+	reader := lz4.NewReader(bytes.NewReader(data))
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(reader); err != nil {
+		return nil, err
+	}
+	
+	// MessagePack 反序列化
+	var points []PointInfo
+	if err := msgpack.Unmarshal(buf.Bytes(), &points); err != nil {
+		return nil, err
+	}
+	
+	return points, nil
 }
