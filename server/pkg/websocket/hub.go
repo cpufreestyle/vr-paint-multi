@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -12,6 +14,9 @@ import (
 	"github.com/pierrec/lz4/v4"
 	"github.com/vmihailenco/msgpack/v5"
 )
+
+// 本地 strokecache 包（避免模块路径问题）
+// 在同一文件中定义简化版缓存
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -117,7 +122,8 @@ type Message struct {
 type Room struct {
 	ID           string
 	Clients      map[*Client]bool
-	Strokes      []*Stroke      // 房间内所有笔触（按时间顺序）
+	Strokes      []*Stroke      // 房间内所有笔触（内存中，按时间顺序）
+	strokeCache  *StrokeCache // LRU 缓存 + 磁盘持久化
 	UndoStack    map[string]*Stroke // strokeID -> stroke（用于撤销）
 	ServerClock  VectorClock    // 服务端版本向量
 	mu           sync.RWMutex
@@ -176,6 +182,10 @@ func (h *Hub) cleanupRooms() {
 		for roomID, room := range h.rooms {
 			room.mu.Lock()
 			if len(room.Clients) == 0 && time.Since(room.lastActivity) > 30*time.Minute {
+				// 将缓存写回磁盘
+				if room.strokeCache != nil {
+					room.strokeCache.Flush()
+				}
 				delete(h.rooms, roomID)
 				log.Printf("[Hub] Cleaned up inactive room: %s", roomID)
 			}
@@ -229,15 +239,20 @@ func (h *Hub) Run() {
 			roomID := client.roomID
 			room, ok := h.rooms[roomID]
 			if !ok {
+				// 创建缓存目录
+				cacheDir := filepath.Join(".strokes", roomID)
+				os.MkdirAll(cacheDir, 0755)
+				
 				room = &Room{
 					ID:           roomID,
 					Clients:      make(map[*Client]bool),
+					strokeCache:  NewStrokeCache(500, cacheDir), // LRU 500 条内存
 					UndoStack:    make(map[string]*Stroke),
 					ServerClock:  make(VectorClock),
 					lastActivity: time.Now(),
 				}
 				h.rooms[roomID] = room
-				log.Printf("[Hub] Created room: %s", roomID)
+				log.Printf("[Hub] Created room: %s (cache: %s)", roomID, cacheDir)
 			}
 			room.mu.Lock()
 			room.Clients[client] = true
@@ -466,8 +481,19 @@ func (c *Client) handleStroke(msg *Message) {
 	
 	// 3. 记录笔触（用于同步给新加入者）
 	room.Strokes = append(room.Strokes, msg.Stroke)
-	if len(room.Strokes) > 1000 {
-		room.Strokes = room.Strokes[len(room.Strokes)-1000:]
+	
+	// 写入 LRU 缓存 + 磁盘
+	strokeData, _ := json.Marshal(msg.Stroke)
+	room.strokeCache.Add(msg.Stroke.ID, &StrokeCacheData{
+		ID:        msg.Stroke.ID,
+		PlayerID:  playerID,
+		Timestamp: time.Now().Unix(),
+		Data:      strokeData,
+	})
+	
+	// 内存保留最多 500 条（LRU 会淘汰旧笔触到磁盘）
+	if len(room.Strokes) > 500 {
+		room.Strokes = room.Strokes[len(room.Strokes)-500:]
 	}
 	room.UndoStack[msg.Stroke.ID] = msg.Stroke
 	room.lastActivity = time.Now()
@@ -536,10 +562,22 @@ func (c *Client) handleSync(msg *Message) {
 	}
 	
 	room.mu.RLock()
+	// 从缓存加载所有笔触（包括磁盘中的）
+	allStrokes := room.strokeCache.GetAll()
+	var strokes []*Stroke
+	for _, sd := range allStrokes {
+		var s Stroke
+		if err := json.Unmarshal(sd.Data, &s); err == nil {
+			strokes = append(strokes, &s)
+		}
+	}
+	// 合并内存中的笔触（可能比缓存新）
+	strokes = append(strokes, room.Strokes...)
+	
 	syncMsg := Message{
 		Type:        MsgTypeSyncResp,
 		Players:     h.getRoomPlayers(roomID),
-		Strokes:     room.Strokes,
+		Strokes:     strokes,
 		ServerClock: room.ServerClock,
 	}
 	room.mu.RUnlock()
@@ -592,6 +630,12 @@ func (c *Client) handleClear(msg *Message) {
 	room.mu.Lock()
 	room.Strokes = nil
 	room.UndoStack = make(map[string]*Stroke)
+	// 清空缓存（包括磁盘）
+	if room.strokeCache != nil {
+		for _, sd := range room.strokeCache.GetAll() {
+			room.strokeCache.Remove(sd.ID)
+		}
+	}
 	room.mu.Unlock()
 	
 	clearMsg, _ := json.Marshal(Message{Type: MsgTypeClear, RoomID: c.roomID, Player: c.player})
