@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 var upgrader = websocket.Upgrader{
@@ -16,6 +18,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+	// Enable permessage-deflate compression (RFC 7692)
+	EnableCompression: true,
 }
 
 // 消息类型
@@ -119,14 +123,17 @@ type Room struct {
 
 // Client WebSocket 客户端
 type Client struct {
-	hub         *Hub
-	conn        *websocket.Conn
-	send        chan []byte
-	roomID      string
-	player      *Player
-	clientClock VectorClock     // 客户端版本向量
-	pendingAcks map[int64]bool  // 待确认的消息ID
-	mu          sync.Mutex
+	hub          *Hub
+	conn         *websocket.Conn
+	send         chan []byte
+	roomID       string
+	player       *Player
+	clientClock  VectorClock     // 客户端版本向量
+	pendingAcks  map[int64]bool  // 待确认的消息ID
+	batchBuffer  [][]byte        // 批量发送缓冲区
+	batchTimer   *time.Timer     // 批量发送定时器
+	useMsgPack   bool            // 是否使用 MessagePack
+	mu           sync.Mutex
 }
 
 // Hub 中央管理器
@@ -401,8 +408,8 @@ func (c *Client) readPump() {
 		}
 		
 		var msg Message
-		if err := json.Unmarshal(raw, &msg); err != nil {
-			log.Printf("[WebSocket] JSON parse error: %v", err)
+		if err := deserializeMessage(raw, &msg); err != nil {
+			log.Printf("[WebSocket] Parse error: %v", err)
 			continue
 		}
 		
@@ -601,16 +608,32 @@ func (c *Client) sendpong() {
 
 func (c *Client) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
+	batchTicker := time.NewTicker(50 * time.Millisecond) // 批量发送间隔
 	defer func() {
 		ticker.Stop()
+		batchTicker.Stop()
 		c.conn.Close()
 	}()
 	
 	for {
 		select {
 		case data, _ := <-c.send:
+			c.mu.Lock()
+			c.batchBuffer = append(c.batchBuffer, data)
+			c.mu.Unlock()
+		case <-batchTicker.C:
+			c.mu.Lock()
+			if len(c.batchBuffer) == 0 {
+				c.mu.Unlock()
+				continue
+			}
+			// 合并批量消息（用换行符分隔，客户端按行解析）
+			batchData := bytes.Join(c.batchBuffer, []byte{'\n'})
+			c.batchBuffer = c.batchBuffer[:0]
+			c.mu.Unlock()
+			
 			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			if err := c.conn.WriteMessage(websocket.TextMessage, batchData); err != nil {
 				return
 			}
 		case <-ticker.C:
@@ -646,6 +669,9 @@ func (h *Hub) ServeWs(w http.ResponseWriter, r *http.Request) {
 		clientID = conn.RemoteAddr().String()
 	}
 	
+	// 检测客户端是否支持 MessagePack（通过 URL 参数）
+	useMsgPack := r.URL.Query().Get("format") == "msgpack"
+	
 	client := &Client{
 		hub:          h,
 		conn:         conn,
@@ -654,6 +680,7 @@ func (h *Hub) ServeWs(w http.ResponseWriter, r *http.Request) {
 		player:       &Player{ID: clientID, Name: name, LastActive: time.Now().UnixMilli()},
 		clientClock:  make(VectorClock),
 		pendingAcks:  make(map[int64]bool),
+		useMsgPack:   useMsgPack,
 	}
 	
 	h.register <- client
@@ -676,4 +703,23 @@ func randomString(n int) string {
 		time.Sleep(time.Nanosecond)
 	}
 	return string(b)
+}
+
+// ============ 二进制序列化 ============
+
+// serializeMessage 序列化消息（JSON 或 MessagePack）
+func serializeMessage(msg *Message, useMsgPack bool) ([]byte, error) {
+	if useMsgPack {
+		return msgpack.Marshal(msg)
+	}
+	return json.Marshal(msg)
+}
+
+// deserializeMessage 反序列化消息
+func deserializeMessage(data []byte, msg *Message) error {
+	// 自动检测格式：MessagePack 以 0x81-0x8F 或 0xDE-0xDF 开头
+	if len(data) > 0 && (data[0] >= 0x81 && data[0] <= 0x8F || data[0] == 0xDE || data[0] == 0xDF) {
+		return msgpack.Unmarshal(data, msg)
+	}
+	return json.Unmarshal(data, msg)
 }
