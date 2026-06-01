@@ -534,12 +534,25 @@ func (c *Client) handleStrokeDelta(msg *Message) {
 	room.lastActivity = time.Now()
 	room.mu.Unlock()
 	
-	// 自动压缩：点数 > 10 时使用 LZ4 压缩
+	// 接收端：如果消息是压缩的，先解压
+	if msg.StrokeDelta.UseCompress && len(msg.StrokeDelta.Compressed) > 0 {
+		points, err := decompressPoints(msg.StrokeDelta.Compressed)
+		if err == nil {
+			msg.StrokeDelta.NewPoints = points
+			msg.StrokeDelta.Compressed = nil
+			msg.StrokeDelta.UseCompress = false
+		} else {
+			log.Printf("[StrokeDelta] Decompress error: %v", err)
+			return
+		}
+	}
+	
+	// 发送端：点数 > 10 时压缩
 	if len(msg.StrokeDelta.NewPoints) > 10 {
 		compressed, err := compressPoints(msg.StrokeDelta.NewPoints)
 		if err == nil {
 			msg.StrokeDelta.Compressed = compressed
-			msg.StrokeDelta.NewPoints = nil // 清空原始数据
+			msg.StrokeDelta.NewPoints = nil
 			msg.StrokeDelta.UseCompress = true
 		}
 	}
