@@ -36,21 +36,20 @@ func main() {
 		w.Write([]byte(`{"status":"ok","version":"1.0.0"}`))
 	})
 
-	// 静态文件服务：A-Painter 资源放在 ../vr-paint 中
-	fs := http.FileServer(http.Dir("../../vr-paint"))
-	http.Handle("/", fs)
-
-	// 多人绘画页面：使用 ../multi.html
-	http.HandleFunc("/multiplayer.html", func(w http.ResponseWriter, r *http.Request) {
+	// ─── 统一入口：/ 和 /multiplayer.html 都指向合并后的页面 ───
+	// 页面支持单人模式（无需 WebSocket）和多人协作（按需联网）
+	singleAndMultiHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data, err := os.ReadFile("../multi.html")
 		if err != nil {
 			log.Printf("[HTTP] Failed to read ../multi.html: %v", err)
-			http.Error(w, "Multiplayer page not found", http.StatusInternalServerError)
+			http.Error(w, "Page not found", http.StatusInternalServerError)
 			return
 		}
 		w.Write(data)
-	})
+	}
+	http.HandleFunc("/", singleAndMultiHandler)
+	http.HandleFunc("/multiplayer.html", singleAndMultiHandler)
 
 	// 多人绘画客户端脚本
 	http.Handle("/multiplayer/", http.StripPrefix("/multiplayer/", http.FileServer(http.Dir("../multiplayer"))))

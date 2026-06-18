@@ -373,6 +373,7 @@ class VRPaintMultiplayer {
             id: strokeData.id || this.generateStrokeID(),
             brush: {
                 index: strokeData.brushIndex || 0,
+                name: strokeData.brushName || 'flat',
                 color: strokeData.color || [1, 0, 0],
                 size: strokeData.size || 0.01,
             },
