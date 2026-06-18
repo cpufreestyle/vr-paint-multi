@@ -6,20 +6,16 @@
     <title>🐉 端午 VR 绘画 - Dragon Boat Festival VR Paint</title>
     <meta name="description" content="端午安康！在虚拟现实中用VR画笔绘制龙舟、粽子、五彩绳… 支持多人在线协作">
     <meta name="keywords" content="端午节, Dragon Boat Festival, VR, painting, WebXR, A-Frame, 龙舟, 粽子, 端午安康, 多人协作">
-    <link rel="icon" href="img/icon-256.png">
-    <script src="vendor/aframe-master.min.js"></script>
-    <script src="vendor/aframe-input-mapping-component.js"></script>
-    <script src="build.js"></script>
+    <link rel="icon" href="data:,">
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/clipboard@1.5.12/dist/clipboard.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-gltf-exporter-component@0.1.0/dist/aframe-gltf-exporter-component.min.js"></script>
-    <script src="vendor/aframe-blink-controls.js"></script>
-    <script src="vendor/aframe-tooltip-component.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/aframe-orbit-controls@1.3.0/dist/aframe-orbit-controls.min.js"></script>
-    <link rel="stylesheet" href="css/main.css">
     <!-- 多人绘画 + WebGPU -->
     <script src="multiplayer/multiplayer-client.js"></script>
     <script src="multiplayer/multiplayer-integration.js"></script>
     <script src="multiplayer/webgpu-renderer.js"></script>
+    <script src="multiplayer/commercial-dragonboat-scene.js"></script>
     <style>
         /* 统一入口弹窗 */
         #welcome-modal {
@@ -228,21 +224,13 @@
     <div id="online-bar"><span class="dot"></span><span id="online-text">已连接</span></div>
 
     <a-scene vr-analytics renderer="colorManagement: true">
-        <a-assets>
-            <img id="skymap" src="assets/images/sky.jpg" crossorigin="anonymous">
-            <img id="uinormal" src="assets/images/ui-normal.png" crossorigin="anonymous">
-            <img id="floor" src="assets/images/floor.jpg" crossorigin="anonymous">
-            <a-asset-item id="logoobj" src="assets/models/logo.obj"></a-asset-item>
-            <a-asset-item id="logomtl" src="assets/models/logo.mtl"></a-asset-item>
-            <a-asset-item id="uiobj" src="assets/models/ui.obj"></a-asset-item>
-            <a-asset-item id="hitEntityObj" src="assets/models/TeleportHitEntity.obj"></a-asset-item>
-            <a-asset-item id="tipObj" src="assets/models/controller-tip.glb"></a-asset-item>
-            <audio id="ui_click0" src="https://cdn.aframe.io/a-painter/sounds/ui_click0.ogg"></audio>
-            <audio id="ui_click1" src="https://cdn.aframe.io/a-painter/sounds/ui_click1.ogg"></audio>
-            <audio id="ui_menu" src="https://cdn.aframe.io/a-painter/sounds/ui_menu.ogg"></audio>
-            <audio id="ui_undo" src="https://cdn.aframe.io/a-painter/sounds/ui_undo.ogg"></audio>
-            <audio id="ui_tick" src="https://cdn.aframe.io/a-painter/sounds/ui_tick.ogg"></audio>
-            <audio id="ui_paint" src="https://cdn.aframe.io/a-painter/sounds/ui_paint.ogg"></audio>
+        <a-assets timeout="1000">
+            <audio id="ui_click0" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_click0.ogg"></audio>
+            <audio id="ui_click1" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_click1.ogg"></audio>
+            <audio id="ui_menu" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_menu.ogg"></audio>
+            <audio id="ui_undo" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_undo.ogg"></audio>
+            <audio id="ui_tick" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_tick.ogg"></audio>
+            <audio id="ui_paint" crossorigin="anonymous" src="https://cdn.aframe.io/a-painter/sounds/ui_paint.ogg"></audio>
         </a-assets>
         
         <!-- 夜空 -->
@@ -260,7 +248,7 @@
         
         <a-entity id="ground"
                   geometry="primitive: box; width: 12; height: 0.01; depth: 12"
-                  material="shader: flat; src: #floor"></a-entity>
+                  material="shader: flat; color: #1e9fc2"></a-entity>
 
         <!-- ═══════════════════════════════════ -->
         <!--  端午节主题场景元素                     -->
@@ -371,7 +359,7 @@
         <a-circle position="-8 12 -21" radius="4.5" material="shader: flat; color: #fffacd; opacity: 0.15; transparent: true"></a-circle>
 
         <!-- 端午安康文字 -->
-        <a-entity id="festival-title" position="0 3 -6" animation="property: position; from: 0 3 -6; to: 0 3.3 -6; dur: 3000; direction: alternate; loop: true; easing: easeInOutSine">
+        <a-entity id="festival-title" position="0 3 -6" animation="property: position; from: 0 3 -6; to: 0 3.3 -6; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine">
           <a-text value="端午安康" color="#ffd700" align="center" width="12" font="mozillavr" text="anchor: center; baseline: center"></a-text>
           <a-text value="DRAGON BOAT FESTIVAL" color="#ffffff" align="center" width="8" position="0 -0.5 0" font="mozillavr" text="anchor: center; baseline: center"></a-text>
         </a-entity>
@@ -470,8 +458,8 @@
         <!--  核心绘画系统                         -->
         <!-- ═══════════════════════════════════ -->
 
-        <a-entity id="hitEntityLeft" material="shader:flat; color: #ff3468" obj-model="obj: #hitEntityObj"></a-entity>
-        <a-entity id="hitEntityRight" material="shader:flat; color: #ff3468" obj-model="obj: #hitEntityObj"></a-entity>
+        <a-entity id="hitEntityLeft" geometry="primitive: sphere; radius: 0.08" material="shader:flat; color: #ff3468"></a-entity>
+        <a-entity id="hitEntityRight" geometry="primitive: sphere; radius: 0.08" material="shader:flat; color: #ff3468"></a-entity>
         
         <a-entity id="cameraRig">
             <a-entity id="acamera" camera wasd-controls look-controls></a-entity>
