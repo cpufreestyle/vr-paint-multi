@@ -146,9 +146,105 @@ DBF.bindUI = function(){
     if(DBF.dropRiverLanterns) DBF.dropRiverLanterns(12);
     DBF.setHint('放河灯祈福 · 灯随水流而下');
   });
+
+  // 音效开关
+  let soundOn = true;
+  document.getElementById('btn-sound').addEventListener('click', ()=>{
+    soundOn = !soundOn;
+    if(bgGain) bgGain.gain.value = soundOn ? 0.15 : 0;
+    if(sfxGain) sfxGain.gain.value = soundOn ? 0.5 : 0;
+    DBF.setHint(soundOn ? '音效已开启 🔊' : '音效已关闭 🔇');
+  });
+
+  // 观赏模式偶尔笛声
+  setInterval(()=>{
+    if(DBF.state.mode==='view' && soundOn && DBF.playFlute) DBF.playFlute();
+  }, 8000+Math.random()*6000);
 };
 
 DBF._autoOrbit = true;
+
+// ---------- 背景音效系统 ----------
+let audioCtx = null;
+let bgGain = null;
+let sfxGain = null;
+let ambientStarted = false;
+
+DBF.initAudio = function(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  bgGain = audioCtx.createGain(); bgGain.gain.value = 0.15; bgGain.connect(audioCtx.destination);
+  sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.5; sfxGain.connect(audioCtx.destination);
+};
+
+DBF.startAmbient = function(){
+  if(!audioCtx) DBF.initAudio();
+  if(ambientStarted) return;
+  ambientStarted = true;
+  const bufLen = audioCtx.sampleRate * 4;
+  const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  for(let i=0;i<bufLen;i++){
+    const white = Math.random()*2-1;
+    b0=0.99886*b0+white*0.0555179; b1=0.99332*b1+white*0.0750759;
+    b2=0.96900*b2+white*0.1538520; b3=0.86650*b3+white*0.3104856;
+    b4=0.55000*b4+white*0.5329522; b5=-0.7616*b5-white*0.0168980;
+    d[i]=(b0+b1+b2+b3+b4+b5+b6+white*0.5362)*0.05;
+    b6=white*0.115926;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type='lowpass'; filter.frequency.value=400; filter.Q.value=1;
+  src.connect(filter); filter.connect(bgGain);
+  src.start();
+  // 偶尔水花声
+  setInterval(()=>{
+    if(!audioCtx || audioCtx.state!=='running') return;
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+    o.type='sine'; o.frequency.value=200+Math.random()*300;
+    g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+0.3);
+    o.connect(g); g.connect(sfxGain);
+    o.start(); o.stop(audioCtx.currentTime+0.3);
+  }, 2000+Math.random()*3000);
+};
+
+DBF.playDrum = function(){
+  if(!audioCtx) DBF.initAudio();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+  o.type='sine'; o.frequency.setValueAtTime(150, now);
+  o.frequency.exponentialRampToValueAtTime(60, now+0.15);
+  g.gain.setValueAtTime(0.7, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now+0.25);
+  o.connect(g); g.connect(sfxGain); o.start(); o.stop(now+0.3);
+  const nb=audioCtx.createBuffer(1, audioCtx.sampleRate*0.1, audioCtx.sampleRate);
+  const nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++) nd[i]=(Math.random()*2-1)*Math.exp(-i/nd.length*5);
+  const ns=audioCtx.createBufferSource(); ns.buffer=nb;
+  const ng=audioCtx.createGain(); ng.gain.setValueAtTime(0.35,now);
+  ng.gain.exponentialRampToValueAtTime(0.001,now+0.1);
+  ns.connect(ng); ng.connect(sfxGain); ns.start();
+};
+
+DBF.playFlute = function(){
+  if(!audioCtx) DBF.initAudio();
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  const now=audioCtx.currentTime;
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain();
+  o.type='triangle';
+  const notes=[523,587,659,784,880,1047];
+  o.frequency.value=notes[Math.floor(Math.random()*notes.length)];
+  g.gain.setValueAtTime(0,now);
+  g.gain.linearRampToValueAtTime(0.12,now+0.1);
+  g.gain.linearRampToValueAtTime(0.08,now+0.6);
+  g.gain.exponentialRampToValueAtTime(0.001,now+1.2);
+  o.connect(g); g.connect(sfxGain); o.start(); o.stop(now+1.3);
+};
+
 DBF.start = function(){
   const {clock, controls, renderer, scene, camera} = DBF;
   function animate(){

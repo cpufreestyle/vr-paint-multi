@@ -203,6 +203,7 @@
   <div class="act-btn" id="btn-time"><svg class="ln" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>时辰：白昼</div>
   <div class="act-btn" id="btn-firework"><svg class="ln" viewBox="0 0 24 24"><path d="M12 12V3M12 12l6.4-3.5M12 12l6.4 3.5M12 12l-6.4-3.5M12 12l-6.4 3.5"/><circle cx="12" cy="12" r="1"/></svg>放烟花</div>
   <div class="act-btn" id="btn-lantern"><svg class="ln" viewBox="0 0 24 24"><path d="M12 3v2"/><ellipse cx="12" cy="12" rx="5" ry="6"/><path d="M8 6.5h8M8 17.5h8M12 19v2"/></svg>放河灯</div>
+  <div class="act-btn" id="btn-sound"><svg class="ln" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>音效</div>
 </div>
 
 <!-- 竞速 HUD -->
@@ -233,10 +234,18 @@
   <div class="sep"></div>
   <div id="palette"></div>
   <div class="sep"></div>
-  <label>粗细 <input type="range" id="paint-size" min="1" max="40" value="10"><span id="paint-size-val">10</span></label>
+  <label>粗细 <input type="range" id="paint-size" min="1" max="40" value="20"><span id="paint-size-val">20</span></label>
+  <div class="sep"></div>
+  <div id="blends">
+    <div class="blend-btn on" data-blend="normal"><svg class="ln" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>普通</div>
+    <div class="blend-btn" data-blend="additive"><svg class="ln" viewBox="0 0 24 24"><path d="M12 2v4m0 12v4M2 12h4m12 0h4m-3.3-6.7l-2.8 2.8m-5.8 5.8l-2.8 2.8m0-11.3l2.8 2.8m5.8 5.8l2.8 2.8"/></svg>叠加</div>
+    <div class="blend-btn" data-blend="multiply"><svg class="ln" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><circle cx="15" cy="15" r="6"/></svg>叠底</div>
+  </div>
   <div class="sep"></div>
   <div class="pbtn" id="paint-undo"><svg class="ln" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 010 10h-2"/></svg>撤销</div>
   <div class="pbtn" id="paint-clear"><svg class="ln" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>清空</div>
+  <div class="sep"></div>
+  <div class="pbtn" id="paint-ai" style="background:linear-gradient(135deg,rgba(196,30,58,.35),rgba(224,168,46,.3));border-color:var(--gold);color:#ffd76a;"><span style="font-size:15px;">✨</span> AI 涂鸦</div>
 </div>
 
 <!-- 加载遮罩 -->
@@ -256,6 +265,7 @@
 <script src="js/boats.js"></script>
 <script src="js/fx.js"></script>
 <script src="js/paint.js"></script>
+<script src="js/ai-paint.js"></script>
 
 <!-- ============ 启动 ============ -->
 <script>
@@ -266,7 +276,20 @@
     DBF.buildFX();
     DBF.initPaint();
     DBF.bindUI();
+    // AI 涂鸦按钮
+    document.getElementById('paint-ai').addEventListener('click', function(){
+      if(DBF.state.mode!=='paint'){
+        // 自动切换到绘画模式
+        document.querySelector('[data-mode=paint]').click();
+      }
+      setTimeout(function(){ window.AIPaint && window.AIPaint.showPanel(); }, 100);
+    });
     DBF.start();
+    // 首次点击启动音效
+    document.addEventListener('click', function once(){
+      DBF.initAudio(); DBF.startAmbient();
+      document.removeEventListener('click', once);
+    }, {once:true});
     // 默认黄昏
     DBF.setTimeOfDay('day');
     setTimeout(function(){
@@ -276,5 +299,10 @@
     }, 700);
   });
 </script>
+
+    <!-- 返回 VR 绘画首页 -->
+    <a href="/" id="back-to-paint" style="position:fixed;bottom:18px;right:18px;z-index:30;padding:10px 16px;border-radius:999px;background:rgba(12,18,40,.72);border:1px solid rgba(255,215,106,.25);color:#cdd7f0;font-size:13px;text-decoration:none;backdrop-filter:blur(9px);transition:all .25s ease;pointer-events:auto;cursor:pointer;">🎨 返回 VR 绘画</a>
+    <style>#back-to-paint:hover{border-color:#ffd700;color:#fff;box-shadow:0 0 14px rgba(255,215,106,.3);}</style>
+
 </body>
 </html>

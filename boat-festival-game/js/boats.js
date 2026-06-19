@@ -327,8 +327,10 @@ function updateBoats(dt,t){
         }
       }
     } else {
-      b.speed += (10-b.speed)*Math.min(1,dt*1.0);
-      b.cadence = 3.2;
+      // 非竞速模式：龙舟沿河巡游，速度有节奏感
+      const cruiseSpeed = 8 + Math.sin(t*0.5+i*1.3)*3;
+      b.speed += (cruiseSpeed-b.speed)*Math.min(1,dt*1.0);
+      b.cadence = 2.8 + Math.sin(t*0.3+i)*0.6;
       b.group.position.z += b.speed*dt;
       if(b.group.position.z > RIVER_L/2-20) b.group.position.z = -RIVER_L/2+20 - i*3;
     }
@@ -356,6 +358,7 @@ function drumBeat(){
   const p=DBF.player, now=DBF._t, gap=now-lastBeatT; lastBeatT=now;
   const rhythm=(gap>0.22&&gap<0.75)?0.26:0.16;
   p.power=Math.min(1,p.power+rhythm);
+  if(DBF.playDrum) DBF.playDrum();
 }
 
 function startRace(){

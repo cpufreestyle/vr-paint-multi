@@ -291,4 +291,16 @@ DBF.initPaint = function(){
   });
 };
 
+// 导出供 ai-paint.js 使用
+window.PaintInternals = {
+  buildBrush,
+  items,
+  disposeObj,
+  glowMat,
+  paintGroup,
+  curColor,
+  curSize,
+  curBrush,
+};
+
 })();
