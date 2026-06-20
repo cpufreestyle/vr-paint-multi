@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>龙舟盛景 · 端午竞渡 Dragon Boat Festival</title>
+<meta name="description" content="端午安康！3D 龙舟竞渡盛景：青山绿水、百舸争流、岸边人潮、夜放烟花，可竞速、可敲鼓、可空间绘画。继承自 vr-paint-multi。">
+<style>
+  :root{
+    --gold:#ffd76a;
+    --gold-deep:#e0a82e;
+    --red:#c41e3a;
+    --red-deep:#8b1228;
+    --ink:#0a0e1f;
+    --ink2:#121a33;
+    --cyan:#5fe0ff;
+    --paper:#f3ecd8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0a0e1f;
+    font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    color:#e9eefb;user-select:none;-webkit-user-select:none;}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;}
+
+  /* 线性图标（无 emoji，全部 stroke 描边） */
+  svg.ln{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .mode-btn .ico svg{width:22px;height:22px;display:block;}
+  .act-btn svg,.pbtn svg,.drum-tip svg{width:15px;height:15px;vertical-align:-2px;margin-right:7px;}
+  .brush-btn svg{width:14px;height:14px;vertical-align:-2px;margin-right:5px;}
+
+  /* ============ 顶部标题条 ============ */
+  #topbar{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    display:flex;align-items:center;gap:14px;padding:14px 22px;
+    background:linear-gradient(180deg,rgba(8,12,28,.78),rgba(8,12,28,0));
+    pointer-events:none;
+  }
+  #topbar .seal{
+    width:38px;height:38px;border-radius:9px;flex:none;
+    background:linear-gradient(135deg,var(--red),var(--red-deep));
+    border:1.5px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:"Noto Serif SC",serif;font-weight:700;font-size:20px;color:var(--gold);
+    box-shadow:0 0 16px rgba(196,30,58,.5);
+  }
+  #topbar h1{font-family:"Noto Serif SC","Microsoft YaHei",serif;
+    font-size:22px;font-weight:700;letter-spacing:.06em;
+    background:linear-gradient(90deg,var(--gold),#fff5d6,var(--gold));
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    text-shadow:0 2px 12px rgba(0,0,0,.4);}
+  #topbar .en{font-size:11px;letter-spacing:.28em;color:#9fb0d8;text-transform:uppercase;margin-left:2px;}
+  #topbar .from{margin-left:auto;font-size:11px;color:#6b7aa0;letter-spacing:.05em;}
+
+  /* ============ 左侧模式栏 ============ */
+  #modebar{
+    position:fixed;left:18px;top:50%;transform:translateY(-50%);z-index:20;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .mode-btn{
+    pointer-events:auto;cursor:pointer;
+    width:96px;padding:11px 8px;border-radius:13px;
+    background:rgba(12,18,40,.72);border:1px solid rgba(255,215,106,.22);
+    backdrop-filter:blur(9px);
+    color:#cdd7f0;font-size:13px;text-align:center;
+    transition:all .25s cubic-bezier(.22,.68,.35,1);
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+  }
+  .mode-btn .ico{font-size:20px;line-height:1;}
+  .mode-btn:hover{border-color:var(--gold);color:#fff;transform:translateX(3px);}
+  .mode-btn.on{
+    background:linear-gradient(135deg,rgba(196,30,58,.55),rgba(224,168,46,.4));
+    border-color:var(--gold);color:#fff;
+    box-shadow:0 0 18px rgba(255,215,106,.35);
+  }
+
+  /* ============ 右侧动作栏 ============ */
+  #actionbar{
+    position:fixed;right:18px;top:50%;transform:translateY(-50%);z-index:20;
+    display:flex;flex-direction:column;gap:10px;align-items:flex-end;
+  }
+  .act-btn{
+    pointer-events:auto;cursor:pointer;min-width:120px;
+    padding:10px 14px;border-radius:999px;
+    background:rgba(12,18,40,.72);border:1px solid rgba(95,224,255,.25);
+    backdrop-filter:blur(9px);color:#cdd7f0;font-size:13px;text-align:center;
+    transition:all .25s ease;
+  }
+  .act-btn:hover{border-color:var(--cyan);color:#fff;box-shadow:0 0 14px rgba(95,224,255,.3);}
+  .act-btn.on{background:rgba(95,224,255,.16);border-color:var(--cyan);color:#fff;}
+
+  /* ============ 底部提示 ============ */
+  #hint{
+    position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;
+    background:rgba(10,14,31,.78);border:1px solid rgba(255,215,106,.18);
+    border-radius:999px;padding:8px 22px;font-size:12.5px;color:#aebbd9;
+    backdrop-filter:blur(8px);letter-spacing:.02em;max-width:80vw;text-align:center;
+    transition:opacity .4s;
+  }
+  #hint b{color:var(--gold);}
+
+  /* ============ 竞速 HUD ============ */
+  #race-hud{
+    position:fixed;bottom:64px;left:50%;transform:translateX(-50%);z-index:20;
+    display:none;flex-direction:column;align-items:center;gap:8px;width:min(560px,86vw);
+  }
+  #race-hud .row{display:flex;gap:16px;align-items:center;width:100%;}
+  #race-hud .rank{
+    font-family:"Noto Serif SC",serif;font-size:30px;font-weight:700;color:var(--gold);
+    text-shadow:0 0 14px rgba(255,215,106,.5);min-width:96px;text-align:center;
+  }
+  #race-hud .rank small{font-size:13px;color:#9fb0d8;display:block;font-family:inherit;font-weight:400;}
+  #race-hud .meters{flex:1;display:flex;flex-direction:column;gap:7px;}
+  .bar{height:12px;border-radius:8px;background:rgba(255,255,255,.08);overflow:hidden;position:relative;}
+  .bar > i{position:absolute;left:0;top:0;bottom:0;border-radius:8px;transition:width .12s linear;}
+  .bar.power > i{background:linear-gradient(90deg,#ff5a3c,var(--gold));}
+  .bar.prog  > i{background:linear-gradient(90deg,var(--cyan),#9affd0);}
+  #race-hud .label{font-size:11px;color:#8fa0c8;display:flex;justify-content:space-between;}
+  #race-hud .drum-tip{
+    font-size:13px;color:#fff;background:linear-gradient(135deg,var(--red),var(--gold));
+    padding:9px 26px;border-radius:999px;animation:beat 1.2s infinite;cursor:pointer;pointer-events:auto;
+    box-shadow:0 4px 18px rgba(196,30,58,.4);
+  }
+  @keyframes beat{0%,100%{transform:scale(1);}50%{transform:scale(1.06);}}
+  #race-banner{
+    position:fixed;top:46%;left:50%;transform:translate(-50%,-50%);z-index:30;
+    font-family:"Noto Serif SC",serif;font-size:72px;font-weight:700;
+    color:var(--gold);text-shadow:0 0 30px rgba(196,30,58,.8),0 6px 20px #000;
+    display:none;pointer-events:none;text-align:center;
+  }
+  #race-banner small{display:block;font-size:22px;color:#fff;letter-spacing:.2em;margin-top:6px;}
+
+  /* ============ 绘画调色板 ============ */
+  #paint-hud{
+    position:fixed;bottom:60px;left:50%;transform:translateX(-50%);z-index:20;
+    display:none;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;
+    max-width:94vw;
+    background:rgba(10,14,31,.82);border:1px solid rgba(255,215,106,.2);
+    border-radius:16px;padding:12px 18px;backdrop-filter:blur(10px);
+  }
+  #brushes{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%;justify-content:center;}
+  .brush-btn{pointer-events:auto;cursor:pointer;font-size:12px;color:#aebbd9;
+    padding:6px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.16);
+    background:rgba(255,255,255,.04);transition:all .18s;white-space:nowrap;}
+  .brush-btn:hover{border-color:var(--gold);color:#fff;}
+  .brush-btn.on{background:rgba(255,215,106,.16);border-color:var(--gold);color:#fff;}
+  #paint-size-val{color:var(--gold);font-family:"Space Mono",monospace;min-width:22px;display:inline-block;text-align:center;}
+  #palette{display:flex;gap:7px;}
+  .swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;pointer-events:auto;
+    border:2px solid rgba(255,255,255,.25);transition:transform .15s;}
+  .swatch:hover{transform:scale(1.18);}
+  .swatch.on{border-color:#fff;transform:scale(1.22);box-shadow:0 0 12px currentColor;}
+  #paint-hud .sep{width:1px;height:30px;background:rgba(255,255,255,.15);}
+  #paint-hud label{font-size:12px;color:#aebbd9;display:flex;align-items:center;gap:7px;}
+  #paint-hud input[type=range]{width:90px;pointer-events:auto;accent-color:var(--gold);}
+  #paint-hud .pbtn{pointer-events:auto;cursor:pointer;font-size:12.5px;color:#cdd7f0;
+    padding:7px 13px;border-radius:9px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);
+    transition:all .2s;}
+  #paint-hud .pbtn:hover{border-color:var(--gold);color:#fff;}
+
+  /* ============ 加载遮罩 ============ */
+  #loader{position:fixed;inset:0;z-index:90;background:radial-gradient(ellipse at 50% 40%,#16213f,#070a18);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .9s;}
+  #loader .lantern{width:46px;height:60px;border-radius:50% 50% 45% 45%;
+    background:radial-gradient(circle at 50% 40%,#ffd76a,#c41e3a);
+    box-shadow:0 0 40px rgba(255,160,60,.7);animation:sway 2.2s ease-in-out infinite;}
+  @keyframes sway{0%,100%{transform:rotate(-6deg) translateY(0);}50%{transform:rotate(6deg) translateY(-6px);}}
+  #loader h2{font-family:"Noto Serif SC",serif;font-size:24px;color:var(--gold);letter-spacing:.1em;}
+  #loader p{font-size:13px;color:#8fa0c8;letter-spacing:.22em;}
+  #loader.hide{opacity:0;pointer-events:none;}
+
+  /* 移动端缩放 */
+  @media (max-width:680px){
+    #topbar h1{font-size:17px;} #topbar .en{display:none;}
+    .mode-btn{width:74px;font-size:11px;padding:8px 5px;}
+    .act-btn{min-width:92px;font-size:11px;padding:8px 10px;}
+    #race-banner{font-size:46px;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- 顶部标题 -->
+<div id="topbar">
+  <div class="seal">舟</div>
+  <div>
+    <h1>龙舟盛景 · 端午竞渡</h1>
+    <span class="en">Dragon Boat Festival</span>
+  </div>
+  <span class="from">基于 vr-paint-multi 重构增强</span>
+</div>
+
+<!-- 左侧模式 -->
+<div id="modebar">
+  <div class="mode-btn on" data-mode="view"><span class="ico"><svg class="ln" viewBox="0 0 24 24"><path d="M3 19l5-8 4 5 2-3 7 6z"/><circle cx="17" cy="6" r="2.2"/></svg></span>自由观赏</div>
+  <div class="mode-btn" data-mode="race"><span class="ico"><svg class="ln" viewBox="0 0 24 24"><path d="M3 14h18l-2.5 5H5.5z"/><path d="M12 14V4"/><path d="M12 5c3 .3 5-1 5-1"/></svg></span>龙舟竞速</div>
+  <div class="mode-btn" data-mode="paint"><span class="ico"><svg class="ln" viewBox="0 0 24 24"><path d="M14 4l6 6-8 8-4 1 1-4z"/><path d="M11 7l6 6"/></svg></span>空间绘画</div>
+</div>
+
+<!-- 右侧动作 -->
+<div id="actionbar">
+  <div class="act-btn" id="btn-time"><svg class="ln" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>时辰：白昼</div>
+  <div class="act-btn" id="btn-firework"><svg class="ln" viewBox="0 0 24 24"><path d="M12 12V3M12 12l6.4-3.5M12 12l6.4 3.5M12 12l-6.4-3.5M12 12l-6.4 3.5"/><circle cx="12" cy="12" r="1"/></svg>放烟花</div>
+  <div class="act-btn" id="btn-lantern"><svg class="ln" viewBox="0 0 24 24"><path d="M12 3v2"/><ellipse cx="12" cy="12" rx="5" ry="6"/><path d="M8 6.5h8M8 17.5h8M12 19v2"/></svg>放河灯</div>
+  <div class="act-btn" id="btn-sound"><svg class="ln" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>音效</div>
+</div>
+
+<!-- 竞速 HUD -->
+<div id="race-hud">
+  <div class="row">
+    <div class="rank" id="race-rank">1<small>当前名次</small></div>
+    <div class="meters">
+      <div class="bar power"><i id="bar-power" style="width:0%"></i></div>
+      <div class="label"><span>桨力 / 船速</span><span id="race-speed">0.0 m/s</span></div>
+      <div class="bar prog"><i id="bar-prog" style="width:0%"></i></div>
+      <div class="label"><span>赛程</span><span id="race-dist">起点</span></div>
+    </div>
+  </div>
+  <div class="drum-tip" id="drum-tip"><svg class="ln" viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v8c0 1.7 3.1 3 7 3s7-1.3 7-3V7"/><path d="M16 4l3-2M8 4 5 2"/></svg>敲鼓加速（空格 / 点此 / 连点）</div>
+</div>
+<div id="race-banner"></div>
+
+<!-- 绘画调色板 -->
+<div id="paint-hud">
+  <div id="brushes">
+    <div class="brush-btn on" data-brush="tube"><svg class="ln" viewBox="0 0 24 24"><path d="M4 14c4-6 12-6 16 0"/></svg>圆管</div>
+    <div class="brush-btn" data-brush="ribbon"><svg class="ln" viewBox="0 0 24 24"><path d="M3 13c3-5 6 5 9 0s6-5 9 0"/></svg>绸带</div>
+    <div class="brush-btn" data-brush="taper"><svg class="ln" viewBox="0 0 24 24"><path d="M4 17C9 16 14 9 20 5"/><path d="M4 17l3 .6"/></svg>毛笔</div>
+    <div class="brush-btn" data-brush="sparkle"><svg class="ln" viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg>星光</div>
+    <div class="brush-btn" data-brush="rain"><svg class="ln" viewBox="0 0 24 24"><path d="M6 10a4 4 0 014-4 5 5 0 019 1"/><path d="M8 15l-1 3M13 15l-1 3M18 15l-1 3"/></svg>下雨</div>
+    <div class="brush-btn" data-brush="snow"><svg class="ln" viewBox="0 0 24 24"><path d="M12 3v18M4.5 7.5l15 9M19.5 7.5l-15 9"/></svg>下雪</div>
+  </div>
+  <div class="sep"></div>
+  <div id="palette"></div>
+  <div class="sep"></div>
+  <label>粗细 <input type="range" id="paint-size" min="1" max="40" value="20"><span id="paint-size-val">20</span></label>
+  <div class="sep"></div>
+  <div id="blends">
+    <div class="blend-btn on" data-blend="normal"><svg class="ln" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>普通</div>
+    <div class="blend-btn" data-blend="additive"><svg class="ln" viewBox="0 0 24 24"><path d="M12 2v4m0 12v4M2 12h4m12 0h4m-3.3-6.7l-2.8 2.8m-5.8 5.8l-2.8 2.8m0-11.3l2.8 2.8m5.8 5.8l2.8 2.8"/></svg>叠加</div>
+    <div class="blend-btn" data-blend="multiply"><svg class="ln" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><circle cx="15" cy="15" r="6"/></svg>叠底</div>
+  </div>
+  <div class="sep"></div>
+  <div class="pbtn" id="paint-undo"><svg class="ln" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5"/><path d="M4 12h11a5 5 0 010 10h-2"/></svg>撤销</div>
+  <div class="pbtn" id="paint-clear"><svg class="ln" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>清空</div>
+  <div class="sep"></div>
+  <div class="pbtn" id="paint-ai" style="background:linear-gradient(135deg,rgba(196,30,58,.35),rgba(224,168,46,.3));border-color:var(--gold);color:#ffd76a;"><span style="font-size:15px;">✨</span> AI 涂鸦</div>
+</div>
+
+<!-- 加载遮罩 -->
+<div id="loader">
+  <div class="lantern"></div>
+  <h2>龙舟盛景</h2>
+  <p>正在挂灯结彩 · 召集划手…</p>
+</div>
+
+<!-- ============ 引擎 ============ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- ============ 游戏模块 ============ -->
+<script src="js/engine.js"></script>
+<script src="js/world.js"></script>
+<script src="js/boats.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/paint.js"></script>
+<script src="js/ai-paint.js"></script>
+
+<!-- ============ 启动 ============ -->
+<script>
+  window.addEventListener('load', function(){
+    DBF.initEngine(document.getElementById('app'));
+    DBF.buildWorld();
+    DBF.buildBoats();
+    DBF.buildFX();
+    DBF.initPaint();
+    DBF.bindUI();
+    // AI 涂鸦按钮
+    document.getElementById('paint-ai').addEventListener('click', function(){
+      if(DBF.state.mode!=='paint'){
+        // 自动切换到绘画模式
+        document.querySelector('[data-mode=paint]').click();
+      }
+      setTimeout(function(){ window.AIPaint && window.AIPaint.showPanel(); }, 100);
+    });
+    DBF.start();
+    // 首次点击启动音效
+    document.addEventListener('click', function once(){
+      DBF.initAudio(); DBF.startAmbient();
+      document.removeEventListener('click', once);
+    }, {once:true});
+    // 默认黄昏
+    DBF.setTimeOfDay('day');
+    setTimeout(function(){
+      var l=document.getElementById('loader');
+      l.classList.add('hide');
+      setTimeout(function(){ l.remove(); }, 950);
+    }, 700);
+  });
+</script>
+
+    <!-- 返回 VR 绘画首页 -->
+    <a href="/" id="back-to-paint" style="position:fixed;bottom:18px;right:18px;z-index:30;padding:10px 16px;border-radius:999px;background:rgba(12,18,40,.72);border:1px solid rgba(255,215,106,.25);color:#cdd7f0;font-size:13px;text-decoration:none;backdrop-filter:blur(9px);transition:all .25s ease;pointer-events:auto;cursor:pointer;">🎨 返回 VR 绘画</a>
+    <style>#back-to-paint:hover{border-color:#ffd700;color:#fff;box-shadow:0 0 14px rgba(255,215,106,.3);}</style>
+
+</body>
+</html>

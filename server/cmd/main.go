@@ -6,43 +6,43 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	ws "vr-paint-multi/pkg/websocket"
 )
 
-func main() {
-	// 打印启动信息
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Printf("🎨 VR Paint Multiplayer Server")
-	log.Printf("   Version: 1.0.0")
-	log.Printf("   Go: %s", runtime.Version())
-	log.Printf("   CPU: %d cores", runtime.NumCPU())
+var projectRoot string
 
-	// 解析参数
+func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Printf("VR Paint Multiplayer Server v2.2.0 (AI Paint)")
+	log.Printf("Go: %s", runtime.Version())
+	log.Printf("CPU: %d cores", runtime.NumCPU())
+
+	exe, _ := os.Executable()
+	projectRoot = filepath.Dir(filepath.Dir(filepath.Dir(exe)))
+	log.Printf("Project root: %s", projectRoot)
+
 	port := flag.Int("port", 8081, "Server port")
 	flag.Parse()
 
-	// 创建 Hub
 	hub := ws.NewHub()
 	go hub.Run()
 
-	// 注册 WebSocket 处理器
 	http.HandleFunc("/ws", hub.ServeWs)
 
-	// 健康检查
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok","version":"1.0.0"}`))
+		w.Write([]byte("{\"status\":\"ok\",\"version\":\"2.2.0\"}"))
 	})
 
-	// ─── 统一入口：/ 和 /multiplayer.html 都指向合并后的页面 ───
-	// 页面支持单人模式（无需 WebSocket）和多人协作（按需联网）
 	singleAndMultiHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		data, err := os.ReadFile("../multi.html")
+		w.Header().Set("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src * ws: wss:; img-src * data: blob:; style-src * 'unsafe-inline'; font-src * data:; media-src * blob:;")
+		data, err := os.ReadFile(filepath.Join(projectRoot, "multi.html"))
 		if err != nil {
-			log.Printf("[HTTP] Failed to read ../multi.html: %v", err)
+			log.Printf("[HTTP] Failed to read multi.html: %v", err)
 			http.Error(w, "Page not found", http.StatusInternalServerError)
 			return
 		}
@@ -51,12 +51,17 @@ func main() {
 	http.HandleFunc("/", singleAndMultiHandler)
 	http.HandleFunc("/multiplayer.html", singleAndMultiHandler)
 
-	// 多人绘画客户端脚本
-	http.Handle("/multiplayer/", http.StripPrefix("/multiplayer/", http.FileServer(http.Dir("../multiplayer"))))
+	http.Handle("/multiplayer/", http.StripPrefix("/multiplayer/", http.FileServer(http.Dir(filepath.Join(projectRoot, "multiplayer")))))
+	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(projectRoot, "assets")))))
+	http.Handle("/img/", http.StripPrefix("/img/", http.FileServer(http.Dir(filepath.Join(projectRoot, "img")))))
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(filepath.Join(projectRoot, "css")))))
+	http.Handle("/vendor/", http.StripPrefix("/vendor/", http.FileServer(http.Dir(filepath.Join(projectRoot, "vendor")))))
+	http.Handle("/sounds/", http.StripPrefix("/sounds/", http.FileServer(http.Dir(filepath.Join(projectRoot, "sounds")))))
+	http.Handle("/boat-festival-game/", http.StripPrefix("/boat-festival-game/", http.FileServer(http.Dir(filepath.Join(projectRoot, "boat-festival-game")))))
 
 	addr := fmt.Sprintf(":%d", *port)
-	log.Printf("🚀 服务器启动: http://localhost:%d", *port)
-	log.Printf("📡 WebSocket: ws://localhost:%d/ws", *port)
+	log.Printf("Server starting http://localhost:%d", *port)
+	log.Printf("WebSocket: ws://localhost:%d/ws", *port)
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
