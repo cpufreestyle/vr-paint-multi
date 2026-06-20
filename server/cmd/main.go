@@ -21,7 +21,9 @@ func main() {
 	log.Printf("CPU: %d cores", runtime.NumCPU())
 
 	exe, _ := os.Executable()
-	projectRoot = filepath.Dir(filepath.Dir(filepath.Dir(exe)))
+	// exe 在 server/ 子目录，需要上两级到项目根目录
+	// 例如: .../vr-paint-multi/server/vr-paint-multi.exe → .../vr-paint-multi
+	projectRoot = filepath.Dir(filepath.Dir(exe))
 	log.Printf("Project root: %s", projectRoot)
 
 	port := flag.Int("port", 8081, "Server port")
