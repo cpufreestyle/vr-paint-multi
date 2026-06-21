@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: vr-paint-multi
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: STATIC_DIR
+        value: /app/static
+      - key: PORT
+        generateValue: false

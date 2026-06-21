@@ -1,0 +1,8 @@
+.git
+bin/
+*.exe
+*.zip
+*.md
+!multi.html
+render.yaml
+.github/

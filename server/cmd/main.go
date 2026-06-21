@@ -20,14 +20,28 @@ func main() {
 	log.Printf("Go: %s", runtime.Version())
 	log.Printf("CPU: %d cores", runtime.NumCPU())
 
-	exe, _ := os.Executable()
-	// exe 在 server/ 子目录，需要上两级到项目根目录
-	// 例如: .../vr-paint-multi/server/vr-paint-multi.exe → .../vr-paint-multi
-	projectRoot = filepath.Dir(filepath.Dir(exe))
-	log.Printf("Project root: %s", projectRoot)
+	// 支持环境变量指定静态文件目录（云部署用）
+	// 本地开发: 自动从 exe 位置推算项目根目录
+	projectRoot = os.Getenv("STATIC_DIR")
+	if projectRoot == "" {
+		exe, _ := os.Executable()
+		// exe 在 server/ 子目录，上两级到项目根目录
+		projectRoot = filepath.Dir(filepath.Dir(exe))
+	}
+	log.Printf("Static files root: %s", projectRoot)
 
-	port := flag.Int("port", 8081, "Server port")
+	port := flag.Int("port", 0, "Server port (default: 8081, or PORT env var)")
 	flag.Parse()
+
+	listenPort := *port
+	if listenPort == 0 {
+		if p := os.Getenv("PORT"); p != "" {
+			fmt.Sscanf(p, "%d", &listenPort)
+		}
+		if listenPort == 0 {
+			listenPort = 8081
+		}
+	}
 
 	hub := ws.NewHub()
 	go hub.Run()
@@ -61,7 +75,7 @@ func main() {
 	http.Handle("/sounds/", http.StripPrefix("/sounds/", http.FileServer(http.Dir(filepath.Join(projectRoot, "sounds")))))
 	http.Handle("/boat-festival-game/", http.StripPrefix("/boat-festival-game/", http.FileServer(http.Dir(filepath.Join(projectRoot, "boat-festival-game")))))
 
-	addr := fmt.Sprintf(":%d", *port)
+	addr := fmt.Sprintf(":%d", listenPort)
 	log.Printf("Server starting http://localhost:%d", *port)
 	log.Printf("WebSocket: ws://localhost:%d/ws", *port)
 
