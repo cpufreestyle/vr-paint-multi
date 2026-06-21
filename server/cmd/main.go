@@ -67,17 +67,32 @@ func main() {
 	http.HandleFunc("/", singleAndMultiHandler)
 	http.HandleFunc("/multiplayer.html", singleAndMultiHandler)
 
-	http.Handle("/multiplayer/", http.StripPrefix("/multiplayer/", http.FileServer(http.Dir(filepath.Join(projectRoot, "multiplayer")))))
-	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(projectRoot, "assets")))))
-	http.Handle("/img/", http.StripPrefix("/img/", http.FileServer(http.Dir(filepath.Join(projectRoot, "img")))))
-	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir(filepath.Join(projectRoot, "css")))))
-	http.Handle("/vendor/", http.StripPrefix("/vendor/", http.FileServer(http.Dir(filepath.Join(projectRoot, "vendor")))))
-	http.Handle("/sounds/", http.StripPrefix("/sounds/", http.FileServer(http.Dir(filepath.Join(projectRoot, "sounds")))))
-	http.Handle("/boat-festival-game/", http.StripPrefix("/boat-festival-game/", http.FileServer(http.Dir(filepath.Join(projectRoot, "boat-festival-game")))))
+	// Register static file dirs (skip if not exist) / 注册静态文件目录（不存在则跳过）
+	staticDirs := []struct {
+		path   string
+		prefix string
+	}{
+		{"multiplayer", "/multiplayer/"},
+		{"assets", "/assets/"},
+		{"img", "/img/"},
+		{"css", "/css/"},
+		{"vendor", "/vendor/"},
+		{"sounds", "/sounds/"},
+		{"boat-festival-game", "/boat-festival-game/"},
+	}
+	for _, d := range staticDirs {
+		dirPath := filepath.Join(projectRoot, d.path)
+		if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+			http.Handle(d.prefix, http.StripPrefix(d.prefix, http.FileServer(http.Dir(dirPath))))
+			log.Printf("[Static] %s -> %s", d.prefix, dirPath)
+		} else {
+			log.Printf("[Static] %s skipped (dir not found: %s)", d.prefix, dirPath)
+		}
+	}
 
 	addr := fmt.Sprintf(":%d", listenPort)
-	log.Printf("Server starting http://localhost:%d", *port)
-	log.Printf("WebSocket: ws://localhost:%d/ws", *port)
+	log.Printf("Server starting http://localhost:%d", listenPort)
+	log.Printf("WebSocket: ws://localhost:%d/ws", listenPort)
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
